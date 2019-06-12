@@ -1,42 +1,28 @@
-# Sync
+# 节点间同步交易
+区块生产时区块链的基础，如果只需要一台计算机设备记录交易那么久用不着区块链技术；但是
+当更多人参与维护账本的话，参与记账的节点之间就要通信交换各自的记账信息，来同步整个网络
+的账户变动。
+这个文档主要描述一组节点（包含不诚实节点）如何可靠的同步交易信息。
 
-The most basic building block of any blockchain is a ledger to keep track of
-state transitions. If all we care about is keeping this ledger on our local
-machine, then there's not much more we have to do, but things tend to be more
-interesting whenever there are more parties involved. As soon as there are
-multiple parties involved, a distributed ledger is needed, which requires us to
-communicate with others and exchange information about state transitions in
-order to synchronise their local state machines.
+为了解决这个问题，我们需要设计一个最小化协议，在不显著影响网络交易速度的情况下，避免网络
+遭受这类攻击。
 
-This document describes how a set of peers can exchange information about state
-transitions in a settings where peers might not trust each other or could
-possibly even be acting maliciously.
+我们主要通过以下几个维度来设计我们的协议：
 
-With that in mind, we're going to have to come up with a protocol that minimises
-attack surface while not (significantly) hampering the speed with which
-information is disseminated in the network.
+-网络带宽利用率
+-网络交易和区块传播延迟
+-内存和CPU的使用率
 
-There are a couple of dimensions along which we can tune our protocol:
+根据目前的技术现状，我们并不能把所有方面都做到最优。
 
-- network bandwidth usage
-- network latency for transaction/block propagation
-- reliability (in the presence of adversaries)
-- memory/CPU usage
+理想情况下，我们的协议可以根据自己的需要来调整参数，例如当你在手机上运行节点，可以降低带宽
+增加延迟；在一个计算能力很强的节点上，可以通过增加带宽和计算能力来减少延迟。
+ 
+## 传输协议
 
-but as is almost always the case, we cannot have the best of all of them.
-
-Ideally, our protocol has knobs which let users configure it to fit their needs,
-e.g. a node running on a mobile phone might want to reduce bandwidth at the cost
-of increased latency or on the other side of the spectrum a strong node might
-elect to reduce latency by using more network bandwidth and increased CPU usage.
-
-
-## Transport protocol
-
-This initial version is going to have nodes using TCP connections. All
-communication will be encrypted and authenticated to ensure both confidentiality
-and integrity, which prevents adversaries from interfering with the protocol
-and de-anonymisation of nodes to a degree.
+这个初始版本的协议需要节点基于TCP协议互相连接，所有的通信数据都经过加密和认证以确保
+保密性和完整性，防止协议干扰、保护网络的匿名性。
+ 
 
 For encryption and authentication we are going to use the [Noise
 protocol](https://noiseprotocol.org/), with the exact protocol name being
@@ -46,18 +32,13 @@ function. [`XK` as a handshake pattern](https://noiseexplorer.com/patterns/XK/)
 means that the initiator of the handshake sends their static key to
 the responder and the initiator knows the static keyof the responder.
 
-Each node has a static `Curve25519` key pair for P2P communication. The peer
-discovery is bootstrapped by having a set of Aeternity peer addresses in the
-node configuration and the node tries to connect to these peers after starting
-up the node. Peer addresses looks like:
-`aenode://pp_ttZZwTS2nzxg7pnEeFMWeRCfdvdxeRu6SgVyeALZX3LbdeiWS@31.13.249.0:3015`.
+每个节点都有一个静态`Curve25519`键值对来保证点对点通信。对等节点发现是在节点启动时，
+节点根据配置文件中的一组对等节点地址来尝试连接到这些节点，这些节点地址如下：
+`aenode://pp_ttZZwTS2nzxg7pnEeFMWeRCfdvdxeRu6SgVyeALZX3LbdeiWS@31.13.249.0:3015`
+(***TODO***: 补充完整协议，包括关键调度等.)
 
 
-(***TODO***: Spell out the full protocol including key schedule etc.)
-
-
-
-## Peer to peer network
+## 点对点网络
 
 (***TODO***: this should probably be the overarching topic for this document and sync being a sub topic)
 
@@ -66,7 +47,7 @@ available data, there is no need to have a structured overlay network.
 
 An overview of the P2P-message protocol is [here](./sync/p2p_messages.md).
 
-### Bootstrapping
+### 节点启动
 
 Before any node can start the process of downloading the blockchain, it needs to
 discover suitable neighbours, which are part of the peer to peer network.
@@ -93,7 +74,7 @@ entrypoints for the network, in order of preference:
 
 
 
-### Neighbour selection
+### 相邻节点选择
 
 After a node has been bootstrapped, it should try to keep a fairly stable
 neighbourhood and thus try to persist peers across restarts.
@@ -120,7 +101,7 @@ A number of different selection strategies have been discussed in the literature
 but in order to choose the right one we need to first come up with requirements.
 
 
-### Routing
+### 路由
 
 In the Bitcoin and Ethereum networks, routing is of no concern, given that it is
 generally impossible to say, who will produce the next block and as such a user
@@ -157,7 +138,7 @@ incoming/outgoing
 whitelist/blacklist
 
 
-## Incentives
+## 激励
 
 The incentives for nodes to share transactions and blocks with other nodes are
 weak and there is a body of research suggesting that for Nakamoto style
@@ -173,7 +154,7 @@ interest of the network.
 (***TODO***: Come up with something similar to/based on TorCoin, or at least
 mention it and give outlook for how it might be integrated.)
 
-## Block/Transaction Synchronization
+## 区块/交易同步
 
 At startup (after discovering at least one other Peer) the node will
 synchronize the chain, and the current list of unconfirmed transactions.
@@ -188,7 +169,7 @@ node will pick one other peer and synchronize (only the missing) transactions
 from this peer. The synchronization uses MP-trees - a more detailed description is
 [here](./sync/tx_pool_sync.md).
 
-## Block/Transaction Propagation
+## 区块/交易广播
 
 - with bitcoin-ng always sending full blocks would be a giant waste
 
@@ -201,7 +182,7 @@ from this peer. The synchronization uses MP-trees - a more detailed description 
 - consider overhead for sending out single tx vs. batching
 
 
-### Proof of work puzzle
+### 工作证明计算
 
 Node operators have the option to require connecting peers to solve a proof of
 work puzzle as a means of rate limiting. They should make use of this option if
@@ -243,7 +224,7 @@ because it might prevent the majority of people from running nodes and hurt the
 health of the network.
 
 
-### Reputation
+### 声誉
 
 The sync protocol uses a very simple reputation system for peers, which will
 only be used to punish peers sending garbage or misbehaving. Reputation is local
@@ -262,18 +243,18 @@ If the offender is motivated and willing to bring up more nodes, then the node
 under attack MAY opt for connecting nodes be required to solve a proof-of-work puzzle reduce before they are accepted.
 
 
-## Configurables
+## 可配置
 
-- pow target
-- pow wait timeout
-- (listener interface, port)
-- connection timeout
-- #overall connections
-- #incoming connections
-- gossip pool size
-- peers -> (blacklist, whitelist)
+- POW计算目标
+- POW等待时间
+- (侦听接口和端口号)
+- 连接超时
+- #整体连接
+- #传入连接
+- IP池大小
+- 对等节点 -> (黑名单, 白名单)
 
-## Threat Model
+## 线程模型
 
 Any threat model comes with a set of assumptions and attack vectors that are out
 of scope.
@@ -318,7 +299,7 @@ of RFC3552[4]:
 We restrict this model even further and exclude TCP and IP level (distributed)
 denial of service attacks, e.g. SYN floods or any sort of amplification attacks.
 
-### Transport
+### 传输
 
 Transport messages are encrypted and authenticated using the Noise protocol. For
 an in-depth discussion of the Noise protocol and its security guarantees, please
@@ -335,11 +316,11 @@ A Denial of Service (DoS) attack can be mounted at different layers, e.g. at the
 - resource exhaustion for single node by using up all connections/filling up
   RAM
 
-Security:
+安全性:
 
-- eclipse attack -> accepting double spends
+- 日食攻击 -> 接受双花
 
-Privacy:
+匿名性:
 
 - anyone in the same network can basically see everything you do without encryption
 
@@ -351,10 +332,10 @@ although it could be argued that using mix networks hide the IP addresses of par
 
 
 
-### Resource exhaustion
+### 资源枯竭
 
 
-### Eclipse Attacks
+### 日食攻击
 
 Whenever an adversary manages to surround an honest node with adversarial nodes
 then we speak of an eclipse attack.
@@ -365,9 +346,9 @@ solution to a proof of work puzzle whenever they try to initiate a connection
 to another node. This solution
 
 
-### Privacy
+### 隐私
 
-## References
+## 参考文献
 
 [1]: Eyal, Ittay, and Emin Gün Sirer. "Majority is not enough: Bitcoin mining is vulnerable." International conference on financial cryptography and data security. Springer, Berlin, Heidelberg, 2014.
 
